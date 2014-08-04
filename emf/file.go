@@ -3,6 +3,7 @@ package emf
 import (
 	"bytes"
 	"image"
+	"image/draw"
 
 	"code.google.com/p/draw2d/draw2d"
 )
@@ -40,7 +41,7 @@ func ReadFile(data []byte) (*EmfFile, error) {
 
 type context struct {
 	draw2d.GraphicContext
-	img     image.Image
+	img     draw.Image
 	objects map[uint32]Colorer
 }
 

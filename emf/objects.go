@@ -30,7 +30,7 @@ type ColorRef struct {
 }
 
 func (c ColorRef) GetColor() color.NRGBA {
-	return color.NRGBA{c.Red, c.Green, c.Blue, 255}
+	return color.NRGBA{c.Red, c.Green, c.Blue, 0xff}
 }
 
 type SizeL struct {
@@ -49,4 +49,13 @@ type PointL struct {
 
 type RectL struct {
 	Left, Top, Right, Bottom int32
+}
+
+type BitmapInfoHeader struct {
+	HeaderSize                   uint32
+	Width, Height                int32
+	Planes, BitCount             uint16
+	Compression, ImageSize       uint32
+	XPelsPerMeter, YPelsPerMeter int32
+	ColorUsed, ColorImportant    uint32
 }

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"image"
+	"image/draw"
 	"os"
 )
 
@@ -256,6 +258,138 @@ func (r *FillpathRecord) Draw(ctx *context) {
 	ctx.Fill()
 }
 
+type StretchdibitsRecord struct {
+	Record
+	Bounds                                 RectL
+	xDest, yDest, xSrc, ySrc, cxSrc, cySrc int32
+	offBmiSrc, cbBmiSrc                    uint32
+	offBitsSrc, cbBitsSrc                  uint32
+	UsageSrc, BitBltRasterOperation        uint32
+	cxDest, cyDest                         int32
+
+	BmiSrc  BitmapInfoHeader
+	BitsSrc []byte
+}
+
+func readStretchdibitsRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &StretchdibitsRecord{}
+	r.Record = Record{Type: EMR_STRETCHDIBITS, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.xDest); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.yDest); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.xSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.ySrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.cxSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.cySrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.offBmiSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.cbBmiSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.offBitsSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.cbBitsSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.UsageSrc); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.BitBltRasterOperation); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.cxDest); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.cyDest); err != nil {
+		return nil, err
+	}
+	// BitmapBuffer
+	// skipping UndefinedSpace1
+	reader.Seek(int64(r.offBmiSrc-80), os.SEEK_CUR)
+	if err := binary.Read(reader, binary.LittleEndian, &r.BmiSrc); err != nil {
+		return nil, err
+	}
+
+	// skipping UndefinedSpace2
+	reader.Seek(int64(r.offBitsSrc-80-r.BmiSrc.HeaderSize), os.SEEK_CUR)
+	r.BitsSrc = make([]byte, r.cbBitsSrc)
+	if _, err := reader.Read(r.BitsSrc); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (r *StretchdibitsRecord) Draw(ctx *context) {
+
+	// bytes per pixel
+	bpp, ok := map[int]int{
+		BI_BITCOUNT_5: 3,
+		BI_BITCOUNT_6: 4,
+	}[int(r.BmiSrc.BitCount)]
+
+	if !ok {
+		fmt.Fprintln(os.Stderr, "emf: unsupported bitmap type", r.BmiSrc.BitCount)
+		return
+	}
+
+	width, height := int(r.BmiSrc.Width), int(r.BmiSrc.Height)
+
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+
+	// bytes per line
+	bpl := (int(r.BmiSrc.BitCount) / 8) * width
+	// padding to 4 bytes
+	bpl = (bpl + 3) & ^3
+
+	ix := 0
+	// BMP images are stored bottom-up
+	for y := height - 1; y >= 0; y-- {
+		b := r.BitsSrc[y*bpl : y*bpl+bpl]
+		p := img.Pix[ix*img.Stride : ix*img.Stride+img.Stride]
+		for i, j := 0, 0; i < len(p); i, j = i+4, j+bpp {
+			// color in BMP stored in BGR order
+			p[i+0] = b[j+2]
+			p[i+1] = b[j+1]
+			p[i+2] = b[j+0]
+			p[i+3] = 0xff
+		}
+		ix = ix + 1
+	}
+	draw.Draw(ctx.img, ctx.img.Bounds(), img, image.ZP, draw.Over)
+}
+
 type Polybezierto16Record struct {
 	Record
 	Bounds  RectL
@@ -417,7 +551,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_MASKBLT:                 nil,
 	EMR_PLGBLT:                  nil,
 	EMR_SETDIBITSTODEVICE:       nil,
-	EMR_STRETCHDIBITS:           nil,
+	EMR_STRETCHDIBITS:           readStretchdibitsRecord,
 	EMR_EXTCREATEFONTINDIRECTW:  nil,
 	EMR_EXTTEXTOUTA:             nil,
 	EMR_EXTTEXTOUTW:             nil,
