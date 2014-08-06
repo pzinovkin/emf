@@ -16,18 +16,33 @@ import (
 	"github.com/pzinovkin/emftoimg/emf"
 )
 
-func usage() {
-	fmt.Print("\nUsage: emftoimg [inputfile]\n")
-	flag.PrintDefaults()
-	os.Exit(2)
-}
+const VERSION = "0.1.0"
 
 var errlog = log.New(os.Stderr, "emf: ", 0)
 
+var (
+	flagVersion = flag.Bool("version", false, "")
+)
+
+var usage = `EMF images converter
+
+Usage: emftoimg [inputfile]
+   	--version  print the version number
+
+`
+
 func main() {
 
-	flag.Usage = usage
+	flag.Usage = func() {
+		fmt.Fprint(os.Stderr, usage)
+		os.Exit(2)
+	}
 	flag.Parse()
+
+	if *flagVersion {
+		fmt.Println(VERSION)
+		os.Exit(0)
+	}
 
 	fname := flag.Arg(0)
 
