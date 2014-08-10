@@ -1,13 +1,5 @@
 VERSION := $(shell cat main.go | grep "const VERSION" | awk -F "\"" '{print $$2}')
 
-.PHONY: build
-
-build:
-	go build -o build/emftoimg
-
-deps:
-	go get -t -u -v ./...
-
 rpm: clean
 	mkdir -p build/{BUILD,RPMS,SOURCES,SPECS,SRPMS,tmp}
 	mkdir build/BUILD/emftoimg-$(VERSION)
