@@ -33,7 +33,6 @@ func ReadFile(data []byte) (*EmfFile, error) {
 		default:
 			file.Records = append(file.Records, rec)
 		}
-
 	}
 
 	return file, nil
@@ -42,14 +41,14 @@ func ReadFile(data []byte) (*EmfFile, error) {
 type context struct {
 	draw2d.GraphicContext
 	img     draw.Image
-	objects map[uint32]Colorer
+	objects map[uint32]interface{}
 }
 
 func (f *EmfFile) initContext(w, h int) *context {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	gc := draw2d.NewGraphicContext(img)
 
-	return &context{gc, img, make(map[uint32]Colorer)}
+	return &context{gc, img, make(map[uint32]interface{})}
 }
 
 func (f *EmfFile) Draw() image.Image {

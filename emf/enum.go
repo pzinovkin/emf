@@ -1,5 +1,8 @@
 package emf
 
+// FormatSignature
+const ENHMETA_SIGNATURE = 0x464D4520
+
 // RecordType
 const (
 	EMR_HEADER                  = 0x00000001
@@ -155,4 +158,79 @@ const (
 	BI_BITCOUNT_4 = 0x0010
 	BI_BITCOUNT_5 = 0x0018
 	BI_BITCOUNT_6 = 0x0020
+)
+
+// BackgroundMode
+const (
+	TRANSPARENT = 0x0001
+	OPAQUE      = 0x0002
+)
+
+// PenStyle
+const (
+	PS_COSMETIC      = 0x00000000
+	PS_ENDCAP_ROUND  = 0x00000000
+	PS_JOIN_ROUND    = 0x00000000
+	PS_SOLID         = 0x00000000
+	PS_DASH          = 0x00000001
+	PS_DOT           = 0x00000002
+	PS_DASHDOT       = 0x00000003
+	PS_DASHDOTDOT    = 0x00000004
+	PS_NULL          = 0x00000005
+	PS_INSIDEFRAME   = 0x00000006
+	PS_USERSTYLE     = 0x00000007
+	PS_ALTERNATE     = 0x00000008
+	PS_ENDCAP_SQUARE = 0x00000100
+	PS_ENDCAP_FLAT   = 0x00000200
+	PS_JOIN_BEVEL    = 0x00001000
+	PS_JOIN_MITER    = 0x00002000
+	PS_GEOMETRIC     = 0x00010000
+)
+
+//ModifyWorldTransformMode
+const (
+	MWT_IDENTITY      = 0x01
+	MWT_LEFTMULTIPLY  = 0x02
+	MWT_RIGHTMULTIPLY = 0x03
+	MWT_SET           = 0x04
+)
+
+// PolygonFillMode
+const (
+	ALTERNATE = 0x01
+	WINDING   = 0x02
+)
+
+// GraphicsMode
+const (
+	GM_COMPATIBLE = 0x00000001
+	GM_ADVANCED   = 0x00000002
+)
+
+// ExtTextOutOptions
+const (
+	ETO_OPAQUE            = 0x00000002
+	ETO_CLIPPED           = 0x00000004
+	ETO_GLYPH_INDEX       = 0x00000010
+	ETO_RTLREADING        = 0x00000080
+	ETO_NO_RECT           = 0x00000100
+	ETO_SMALL_CHARS       = 0x00000200
+	ETO_NUMERICSLOCAL     = 0x00000400
+	ETO_NUMERICSLATIN     = 0x00000800
+	ETO_IGNORELANGUAGE    = 0x00001000
+	ETO_PDY               = 0x00002000
+	ETO_REVERSE_INDEX_MAP = 0x00010000
+)
+
+// Compression
+const (
+	BI_RGB       = 0x0000
+	BI_RLE8      = 0x0001
+	BI_RLE4      = 0x0002
+	BI_BITFIELDS = 0x0003
+	BI_JPEG      = 0x0004
+	BI_PNG       = 0x0005
+	BI_CMYK      = 0x000B
+	BI_CMYKRLE8  = 0x000C
+	BI_CMYKRLE4  = 0x000D
 )
