@@ -61,7 +61,7 @@ func (f *EmfFile) Draw() image.Image {
 	ctx := f.initContext(width, height)
 
 	// only vertical flip for now
-	if bounds.Top < 0 && bounds.Top < bounds.Bottom {
+	if bounds.Top < 0 && bounds.Top > bounds.Bottom {
 		ctx.Translate(0, float64(height))
 		ctx.Scale(1, -1)
 	}

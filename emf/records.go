@@ -134,10 +134,10 @@ func readSetwindowextexRecord(reader *bytes.Reader, size uint32) (Recorder, erro
 }
 
 func (r *SetwindowextexRecord) Draw(ctx *context) {
-	ctx.Scale(
-		float64(ctx.img.Bounds().Dx())/float64(r.Extent.Cx),
-		float64(ctx.img.Bounds().Dy())/float64(r.Extent.Cy),
-	)
+	if r.Extent.Cx == 1 && r.Extent.Cy == 1 {
+		return
+	}
+	ctx.Scale(1/float64(r.Extent.Cx), 1/float64(r.Extent.Cx))
 }
 
 type SetwindoworgexRecord struct {
@@ -154,6 +154,29 @@ func readSetwindoworgexRecord(reader *bytes.Reader, size uint32) (Recorder, erro
 	}
 
 	return r, nil
+}
+
+type SetviewportextexRecord struct {
+	Record
+	Extent SizeL
+}
+
+func readSetviewportextexRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SetviewportextexRecord{}
+	r.Record = Record{Type: EMR_SETVIEWPORTEXTEX, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Extent); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (r *SetviewportextexRecord) Draw(ctx *context) {
+	if r.Extent.Cx == 1 && r.Extent.Cy == 1 {
+		return
+	}
+	ctx.Scale(1/float64(r.Extent.Cx), 1/float64(r.Extent.Cy))
 }
 
 type SetviewportorgexRecord struct {
@@ -194,6 +217,22 @@ func readEofRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 	}
 
 	if err := binary.Read(reader, binary.LittleEndian, &r.SizeLast); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+type SetmapmodeRecord struct {
+	Record
+	MapMode uint32
+}
+
+func readSetmapmodeRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SetmapmodeRecord{}
+	r.Record = Record{Type: EMR_SETMAPMODE, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.MapMode); err != nil {
 		return nil, err
 	}
 
@@ -531,6 +570,18 @@ func readEndpathRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 }
 
 func (r *EndpathRecord) Draw(ctx *context) {
+	ctx.Close()
+}
+
+type ClosefigureRecord struct {
+	Record
+}
+
+func readClosefigureRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	return &ClosefigureRecord{Record{Type: EMR_CLOSEFIGURE, Size: size}}, nil
+}
+
+func (r *ClosefigureRecord) Draw(ctx *context) {
 	ctx.Close()
 }
 
@@ -1160,13 +1211,13 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_POLYPOLYGON:             nil,
 	EMR_SETWINDOWEXTEX:          readSetwindowextexRecord,
 	EMR_SETWINDOWORGEX:          readSetwindoworgexRecord,
-	EMR_SETVIEWPORTEXTEX:        nil,
+	EMR_SETVIEWPORTEXTEX:        readSetviewportextexRecord,
 	EMR_SETVIEWPORTORGEX:        readSetviewportorgexRecord,
 	EMR_SETBRUSHORGEX:           nil,
 	EMR_EOF:                     readEofRecord,
 	EMR_SETPIXELV:               nil,
 	EMR_SETMAPPERFLAGS:          nil,
-	EMR_SETMAPMODE:              nil,
+	EMR_SETMAPMODE:              readSetmapmodeRecord,
 	EMR_SETBKMODE:               readSetbkmodeRecord,
 	EMR_SETPOLYFILLMODE:         readSetpolyfillmodeRecord,
 	EMR_SETROP2:                 nil,
@@ -1210,7 +1261,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_SETMITERLIMIT:           nil,
 	EMR_BEGINPATH:               readBeginpathRecord,
 	EMR_ENDPATH:                 readEndpathRecord,
-	EMR_CLOSEFIGURE:             nil,
+	EMR_CLOSEFIGURE:             readClosefigureRecord,
 	EMR_FILLPATH:                readFillpathRecord,
 	EMR_STROKEANDFILLPATH:       nil,
 	EMR_STROKEPATH:              nil,
