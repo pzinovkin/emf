@@ -14,7 +14,7 @@ Calling by passing file path as argument will generate image in the folder next 
 
     $ emftoimg /path/to/image.emf
 
-Also supports stdin. Image will be writted to stdout.
+Also supports stdin. Image will be written to stdout.
 
     $ cat /path/to/image.emf | emftoimg > /new/path/image.png
 
