@@ -9,7 +9,7 @@ License:    MIT
 Group:      Applications/System
 BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root
 
-BuildRequires: golang = 1.2.2
+BuildRequires: golang
 
 %description
 EMF images converter
