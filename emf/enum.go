@@ -246,3 +246,27 @@ const (
 	MM_ISOTROPIC   = 0x07
 	MM_ANISOTROPIC = 0x08
 )
+
+// DIBColors
+const (
+	DIB_RGB_COLORS  = 0x00
+	DIB_PAL_COLORS  = 0x01
+	DIB_PAL_INDICES = 0x02
+)
+
+// StretchMode
+const (
+	STRETCH_ANDSCANS    = 0x01
+	STRETCH_ORSCANS     = 0x02
+	STRETCH_DELETESCANS = 0x03
+	STRETCH_HALFTONE    = 0x04
+)
+
+// RegionMode
+const (
+	RGN_AND  = 0x01
+	RGN_OR   = 0x02
+	RGN_XOR  = 0x03
+	RGN_DIFF = 0x04
+	RGN_COPY = 0x05
+)

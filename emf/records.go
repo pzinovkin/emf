@@ -8,6 +8,8 @@ import (
 	"image/draw"
 	"os"
 
+	"code.google.com/p/draw2d/draw2d"
+
 	"github.com/disintegration/imaging"
 )
 
@@ -246,6 +248,7 @@ func readSetmapmodeRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 }
 
 // https://www-user.tu-chemnitz.de/~heha/petzold/ch05f.htm
+// http://msdn.microsoft.com/en-us/library/dd183475(v=vs.85).aspx
 func (r *SetmapmodeRecord) Draw(ctx *context) {
 	ctx.mm = r.MapMode
 	switch r.MapMode {
@@ -292,6 +295,14 @@ func readSetpolyfillmodeRecord(reader *bytes.Reader, size uint32) (Recorder, err
 	return r, nil
 }
 
+func (r *SetpolyfillmodeRecord) Draw(ctx *context) {
+	if r.PolygonFillMode == ALTERNATE {
+		ctx.SetFillRule(draw2d.FillRuleEvenOdd)
+	} else if r.PolygonFillMode == WINDING {
+		ctx.SetFillRule(draw2d.FillRuleWinding)
+	}
+}
+
 type SettextalignRecord struct {
 	Record
 	TextAlignmentMode uint32
@@ -302,6 +313,22 @@ func readSettextalignRecord(reader *bytes.Reader, size uint32) (Recorder, error)
 	r.Record = Record{Type: EMR_SETTEXTALIGN, Size: size}
 
 	if err := binary.Read(reader, binary.LittleEndian, &r.TextAlignmentMode); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+type SetstretchbltmodeRecord struct {
+	Record
+	StretchMode uint32
+}
+
+func readSetstretchbltmodeRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SetstretchbltmodeRecord{}
+	r.Record = Record{Type: EMR_SETSTRETCHBLTMODE, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.StretchMode); err != nil {
 		return nil, err
 	}
 
@@ -346,7 +373,6 @@ func readSetbkcolorRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 
 func (r *SetbkcolorRecord) Draw(ctx *context) {
 	ctx.SetFillColor(r.Color.GetColor())
-	// ctx.Fill()
 }
 
 type MovetoexRecord struct {
@@ -486,14 +512,14 @@ func readSelectobjectRecord(reader *bytes.Reader, size uint32) (Recorder, error)
 }
 
 var StockObjects = map[uint32]interface{}{
-	WHITE_BRUSH:         ColorRef{Red: 255, Green: 255, Blue: 255},
-	LTGRAY_BRUSH:        ColorRef{Red: 192, Green: 192, Blue: 192},
-	GRAY_BRUSH:          ColorRef{Red: 128, Green: 128, Blue: 128},
-	DKGRAY_BRUSH:        ColorRef{Red: 64, Green: 64, Blue: 64},
-	BLACK_BRUSH:         ColorRef{Red: 0, Green: 0, Blue: 0},
+	WHITE_BRUSH:         LogBrushEx{Color: ColorRef{Red: 255, Green: 255, Blue: 255}},
+	LTGRAY_BRUSH:        LogBrushEx{Color: ColorRef{Red: 192, Green: 192, Blue: 192}},
+	GRAY_BRUSH:          LogBrushEx{Color: ColorRef{Red: 128, Green: 128, Blue: 128}},
+	DKGRAY_BRUSH:        LogBrushEx{Color: ColorRef{Red: 64, Green: 64, Blue: 64}},
+	BLACK_BRUSH:         LogBrushEx{Color: ColorRef{Red: 0, Green: 0, Blue: 0}},
 	NULL_BRUSH:          true,
-	WHITE_PEN:           ColorRef{Red: 255, Green: 255, Blue: 255},
-	BLACK_PEN:           ColorRef{Red: 0, Green: 0, Blue: 0},
+	WHITE_PEN:           LogPen{ColorRef: ColorRef{Red: 255, Green: 255, Blue: 255}},
+	BLACK_PEN:           LogPen{ColorRef: ColorRef{Red: 0, Green: 0, Blue: 0}},
 	NULL_PEN:            true,
 	SYSTEM_FONT:         LogFont{Height: 11},
 	DEVICE_DEFAULT_FONT: LogFont{Height: 11},
@@ -512,13 +538,22 @@ func (r *SelectobjectRecord) Draw(ctx *context) {
 
 	switch o := object.(type) {
 	case bool:
-		// do nothing
-	case ColorRef:
-		ctx.SetFillColor(o.GetColor())
+		if r.ihObject == NULL_PEN {
+			ctx.SetStrokeColor(image.Transparent)
+		} else if r.ihObject == NULL_BRUSH {
+			ctx.SetFillColor(image.Transparent)
+		}
 	case LogPen:
-		ctx.SetFillColor(o.ColorRef.GetColor())
+		if o.Width.X == 0 {
+			ctx.SetLineWidth(0)
+		}
+		ctx.SetStrokeColor(o.ColorRef.GetColor())
+
 	case LogPenEx:
-		ctx.SetFillColor(o.ColorRef.GetColor())
+		if o.Width == 0 {
+			ctx.SetLineWidth(0)
+		}
+		ctx.SetStrokeColor(o.ColorRef.GetColor())
 	case LogBrushEx:
 		ctx.SetFillColor(o.Color.GetColor())
 	}
@@ -668,6 +703,26 @@ func (r *FillpathRecord) Draw(ctx *context) {
 	ctx.Fill()
 }
 
+type StrokeandfillpathRecord struct {
+	Record
+	Bounds RectL
+}
+
+func readStrokeandfillpathRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &StrokeandfillpathRecord{}
+	r.Record = Record{Type: EMR_STROKEANDFILLPATH, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *StrokeandfillpathRecord) Draw(ctx *context) {
+	ctx.Fill()
+	ctx.Stroke()
+}
+
 type StrokepathRecord struct {
 	Record
 	Bounds RectL
@@ -685,6 +740,21 @@ func readStrokepathRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 
 func (r *StrokepathRecord) Draw(ctx *context) {
 	ctx.Stroke()
+}
+
+type SelectclippathRecord struct {
+	Record
+	RegionMode uint32
+}
+
+func readSelectclippathRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SelectclippathRecord{}
+	r.Record = Record{Type: EMR_SELECTCLIPPATH, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.RegionMode); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 type CommentRecord struct {
@@ -1062,6 +1132,44 @@ func readExttextoutwRecord(reader *bytes.Reader, size uint32) (Recorder, error) 
 	return r, nil
 }
 
+type Polybezier16Record struct {
+	Record
+	Bounds  RectL
+	Count   uint32
+	aPoints []PointS
+}
+
+func readPolybezier16Record(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &Polybezier16Record{}
+	r.Record = Record{Type: EMR_POLYBEZIER16, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Count); err != nil {
+		return nil, err
+	}
+
+	r.aPoints = make([]PointS, r.Count)
+	if err := binary.Read(reader, binary.LittleEndian, &r.aPoints); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (r *Polybezier16Record) Draw(ctx *context) {
+	ctx.MoveTo(float64(r.aPoints[0].X), float64(r.aPoints[0].Y))
+	for i := 1; i < int(r.Count); i = i + 3 {
+		ctx.CubicCurveTo(
+			float64(r.aPoints[i].X), float64(r.aPoints[i].Y),
+			float64(r.aPoints[i+1].X), float64(r.aPoints[i+1].Y),
+			float64(r.aPoints[i+2].X), float64(r.aPoints[i+2].Y),
+		)
+	}
+}
+
 type Polygon16Record struct {
 	Record
 	Bounds  RectL
@@ -1081,12 +1189,9 @@ func readPolygon16Record(reader *bytes.Reader, size uint32) (Recorder, error) {
 		return nil, err
 	}
 
-	for i := 0; i < int(r.Count); i++ {
-		var p PointS
-		if err := binary.Read(reader, binary.LittleEndian, &p); err != nil {
-			return nil, err
-		}
-		r.aPoints = append(r.aPoints, p)
+	r.aPoints = make([]PointS, r.Count)
+	if err := binary.Read(reader, binary.LittleEndian, &r.aPoints); err != nil {
+		return nil, err
 	}
 
 	return r, nil
@@ -1097,7 +1202,8 @@ func (r *Polygon16Record) Draw(ctx *context) {
 	for i := 1; i < int(r.Count); i++ {
 		ctx.LineTo(float64(r.aPoints[i].X), float64(r.aPoints[i].Y))
 	}
-	ctx.Stroke()
+	ctx.Close()
+	ctx.FillStroke()
 }
 
 type Polyline16Record struct {
@@ -1119,13 +1225,9 @@ func readPolyline16Record(reader *bytes.Reader, size uint32) (Recorder, error) {
 		return nil, err
 	}
 
-	for i := 0; i < int(r.Count); i++ {
-		var p PointS
-		if err := binary.Read(reader, binary.LittleEndian, &p); err != nil {
-			return nil, err
-		}
-
-		r.aPoints = append(r.aPoints, p)
+	r.aPoints = make([]PointS, r.Count)
+	if err := binary.Read(reader, binary.LittleEndian, &r.aPoints); err != nil {
+		return nil, err
 	}
 
 	return r, nil
@@ -1158,13 +1260,9 @@ func readPolybezierto16Record(reader *bytes.Reader, size uint32) (Recorder, erro
 		return nil, err
 	}
 
-	for i := 0; i < int(r.Count); i++ {
-		var p PointS
-		if err := binary.Read(reader, binary.LittleEndian, &p); err != nil {
-			return nil, err
-		}
-
-		r.aPoints = append(r.aPoints, p)
+	r.aPoints = make([]PointS, r.Count)
+	if err := binary.Read(reader, binary.LittleEndian, &r.aPoints); err != nil {
+		return nil, err
 	}
 
 	return r, nil
@@ -1199,13 +1297,9 @@ func readPolylineto16Record(reader *bytes.Reader, size uint32) (Recorder, error)
 		return nil, err
 	}
 
-	for i := 0; i < int(r.Count); i++ {
-		var p PointS
-		if err := binary.Read(reader, binary.LittleEndian, &p); err != nil {
-			return nil, err
-		}
-
-		r.aPoints = append(r.aPoints, p)
+	r.aPoints = make([]PointS, r.Count)
+	if err := binary.Read(reader, binary.LittleEndian, &r.aPoints); err != nil {
+		return nil, err
 	}
 
 	return r, nil
@@ -1215,6 +1309,58 @@ func (r *Polylineto16Record) Draw(ctx *context) {
 	for i := 0; i < int(r.Count); i++ {
 		ctx.LineTo(float64(r.aPoints[i].X), float64(r.aPoints[i].Y))
 	}
+}
+
+type Polypolygon16Record struct {
+	Record
+	Bounds            RectL
+	NumberOfPolygons  uint32
+	Count             uint32
+	PolygonPointCount []uint32
+	aPoints           []PointS
+}
+
+func readPolypolygon16Record(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &Polypolygon16Record{}
+	r.Record = Record{Type: EMR_POLYPOLYGON16, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.NumberOfPolygons); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Count); err != nil {
+		return nil, err
+	}
+
+	r.PolygonPointCount = make([]uint32, r.NumberOfPolygons)
+	if err := binary.Read(reader, binary.LittleEndian, &r.PolygonPointCount); err != nil {
+		return nil, err
+	}
+
+	r.aPoints = make([]PointS, r.Count)
+	if err := binary.Read(reader, binary.LittleEndian, &r.aPoints); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (r *Polypolygon16Record) Draw(ctx *context) {
+	idx := 0
+	for p := 0; p < int(r.NumberOfPolygons); p++ {
+		pCount := int(r.PolygonPointCount[p])
+		ctx.MoveTo(float64(r.aPoints[idx].X), float64(r.aPoints[idx].Y))
+		for i := 1; i < pCount; i++ {
+			ctx.LineTo(float64(r.aPoints[idx+i].X), float64(r.aPoints[idx+i].Y))
+		}
+		idx += pCount
+		ctx.Close()
+	}
+	ctx.FillStroke()
 }
 
 type ExtcreatepenRecord struct {
@@ -1257,6 +1403,12 @@ func readExtcreatepenRecord(reader *bytes.Reader, size uint32) (Recorder, error)
 		return nil, err
 	}
 
+	// offset for bitmap info less than possible minimum
+	// assuming there is no bitmap
+	if r.offBmi < 52 {
+		return r, nil
+	}
+
 	// BitmapBuffer
 	// skipping UndefinedSpace
 	reader.Seek(int64(r.offBmi-52-(r.elp.NumStyleEntries*4)), os.SEEK_CUR)
@@ -1282,6 +1434,22 @@ func (r *ExtcreatepenRecord) Draw(ctx *context) {
 	ctx.objects[r.ihPen] = r.elp
 }
 
+type SeticmmodeRecord struct {
+	Record
+	ICMMode uint32
+}
+
+func readSeticmmodeRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SeticmmodeRecord{}
+	r.Record = Record{Type: EMR_SETICMMODE, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.ICMMode); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
 // map of readers for records
 var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_HEADER:                  readHeaderRecord,
@@ -1304,7 +1472,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_SETBKMODE:               readSetbkmodeRecord,
 	EMR_SETPOLYFILLMODE:         readSetpolyfillmodeRecord,
 	EMR_SETROP2:                 nil,
-	EMR_SETSTRETCHBLTMODE:       nil,
+	EMR_SETSTRETCHBLTMODE:       readSetstretchbltmodeRecord,
 	EMR_SETTEXTALIGN:            readSettextalignRecord,
 	EMR_SETCOLORADJUSTMENT:      nil,
 	EMR_SETTEXTCOLOR:            readSettextcolorRecord,
@@ -1346,11 +1514,11 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_ENDPATH:                 readEndpathRecord,
 	EMR_CLOSEFIGURE:             readClosefigureRecord,
 	EMR_FILLPATH:                readFillpathRecord,
-	EMR_STROKEANDFILLPATH:       nil,
+	EMR_STROKEANDFILLPATH:       readStrokeandfillpathRecord,
 	EMR_STROKEPATH:              readStrokepathRecord,
 	EMR_FLATTENPATH:             nil,
 	EMR_WIDENPATH:               nil,
-	EMR_SELECTCLIPPATH:          nil,
+	EMR_SELECTCLIPPATH:          readSelectclippathRecord,
 	EMR_ABORTPATH:               nil,
 	EMR_COMMENT:                 readCommentRecord,
 	EMR_FILLRGN:                 nil,
@@ -1367,20 +1535,20 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_EXTCREATEFONTINDIRECTW:  readExtcreatefontindirectwRecord,
 	EMR_EXTTEXTOUTA:             nil,
 	EMR_EXTTEXTOUTW:             readExttextoutwRecord,
-	EMR_POLYBEZIER16:            nil,
+	EMR_POLYBEZIER16:            readPolybezier16Record,
 	EMR_POLYGON16:               readPolygon16Record,
 	EMR_POLYLINE16:              readPolyline16Record,
 	EMR_POLYBEZIERTO16:          readPolybezierto16Record,
 	EMR_POLYLINETO16:            readPolylineto16Record,
 	EMR_POLYPOLYLINE16:          nil,
-	EMR_POLYPOLYGON16:           nil,
+	EMR_POLYPOLYGON16:           readPolypolygon16Record,
 	EMR_POLYDRAW16:              nil,
 	EMR_CREATEMONOBRUSH:         nil,
 	EMR_CREATEDIBPATTERNBRUSHPT: nil,
 	EMR_EXTCREATEPEN:            readExtcreatepenRecord,
 	EMR_POLYTEXTOUTA:            nil,
 	EMR_POLYTEXTOUTW:            nil,
-	EMR_SETICMMODE:              nil,
+	EMR_SETICMMODE:              readSeticmmodeRecord,
 	EMR_CREATECOLORSPACE:        nil,
 	EMR_SETCOLORSPACE:           nil,
 	EMR_DELETECOLORSPACE:        nil,

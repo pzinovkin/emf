@@ -70,8 +70,7 @@ func (ctx context) applyTransformation() {
 	}
 
 	switch ctx.mm {
-
-	case MM_TEXT, MM_ISOTROPIC, MM_ANISOTROPIC:
+	case MM_ISOTROPIC, MM_ANISOTROPIC:
 		sx := float64(ctx.ve.Cx) / float64(ctx.we.Cx)
 		sy := float64(ctx.ve.Cy) / float64(ctx.we.Cy)
 		ctx.Scale(sx, sy)
@@ -90,6 +89,10 @@ func (f *EmfFile) Draw() image.Image {
 	height := int(bounds.Bottom - bounds.Top)
 
 	ctx := f.initContext(width, height)
+
+	if bounds.Left != 0 || bounds.Top != 0 {
+		ctx.Translate(-float64(bounds.Left), -float64(bounds.Top))
+	}
 
 	for _, rec := range f.Records {
 		rec.Draw(ctx)
