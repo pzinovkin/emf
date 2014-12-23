@@ -134,10 +134,8 @@ func readSetwindowextexRecord(reader *bytes.Reader, size uint32) (Recorder, erro
 }
 
 func (r *SetwindowextexRecord) Draw(ctx *context) {
-	if r.Extent.Cx == 1 && r.Extent.Cy == 1 {
-		return
-	}
-	ctx.Scale(1/float64(r.Extent.Cx), 1/float64(r.Extent.Cx))
+	ctx.we = &r.Extent
+	ctx.applyTransformation()
 }
 
 type SetwindoworgexRecord struct {
@@ -154,6 +152,11 @@ func readSetwindoworgexRecord(reader *bytes.Reader, size uint32) (Recorder, erro
 	}
 
 	return r, nil
+}
+
+func (r *SetwindoworgexRecord) Draw(ctx *context) {
+	ctx.wo = &r.Origin
+	ctx.applyTransformation()
 }
 
 type SetviewportextexRecord struct {
@@ -173,10 +176,8 @@ func readSetviewportextexRecord(reader *bytes.Reader, size uint32) (Recorder, er
 }
 
 func (r *SetviewportextexRecord) Draw(ctx *context) {
-	if r.Extent.Cx == 1 && r.Extent.Cy == 1 {
-		return
-	}
-	ctx.Scale(1/float64(r.Extent.Cx), 1/float64(r.Extent.Cy))
+	ctx.ve = &r.Extent
+	ctx.applyTransformation()
 }
 
 type SetviewportorgexRecord struct {
@@ -193,6 +194,11 @@ func readSetviewportorgexRecord(reader *bytes.Reader, size uint32) (Recorder, er
 	}
 
 	return r, nil
+}
+
+func (r *SetviewportorgexRecord) Draw(ctx *context) {
+	ctx.vo = &r.Origin
+	ctx.applyTransformation()
 }
 
 type EofRecord struct {
@@ -239,6 +245,21 @@ func readSetmapmodeRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 	return r, nil
 }
 
+// https://www-user.tu-chemnitz.de/~heha/petzold/ch05f.htm
+func (r *SetmapmodeRecord) Draw(ctx *context) {
+	ctx.mm = r.MapMode
+	switch r.MapMode {
+	// rotate y axis
+	case MM_LOMETRIC, MM_HIMETRIC, MM_LOENGLISH, MM_HIENGLISH, MM_TWIPS:
+		ctx.Scale(1, -1)
+		// can't use ctx.Translate here because it will be scaled
+		// if scaling already applied before
+		tr := ctx.GetMatrixTransform()
+		tr[5] = float64(ctx.h)
+		ctx.SetMatrixTransform(tr)
+	}
+}
+
 type SetbkmodeRecord struct {
 	Record
 	BackgroundMode uint32
@@ -265,6 +286,22 @@ func readSetpolyfillmodeRecord(reader *bytes.Reader, size uint32) (Recorder, err
 	r.Record = Record{Type: EMR_SETPOLYFILLMODE, Size: size}
 
 	if err := binary.Read(reader, binary.LittleEndian, &r.PolygonFillMode); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+type SettextalignRecord struct {
+	Record
+	TextAlignmentMode uint32
+}
+
+func readSettextalignRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SettextalignRecord{}
+	r.Record = Record{Type: EMR_SETTEXTALIGN, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.TextAlignmentMode); err != nil {
 		return nil, err
 	}
 
@@ -378,6 +415,33 @@ func readRestoredcRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 
 func (r *RestoredcRecord) Draw(ctx *context) {
 	ctx.Restore()
+}
+
+type SetworldtransformRecord struct {
+	Record
+	XForm XForm
+}
+
+func readSetworldtransformRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &SetworldtransformRecord{}
+	r.Record = Record{Type: EMR_SETWORLDTRANSFORM, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.XForm); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (r *SetworldtransformRecord) Draw(ctx *context) {
+	tr := ctx.GetMatrixTransform()
+	tr[0] = float64(r.XForm.M11)
+	tr[1] = float64(r.XForm.M12)
+	tr[2] = float64(r.XForm.M21)
+	tr[3] = float64(r.XForm.M22)
+	tr[4] = float64(r.XForm.Dx)
+	tr[5] = float64(r.XForm.Dy)
+	ctx.SetMatrixTransform(tr)
 }
 
 type ModifyworldtransformRecord struct {
@@ -602,6 +666,25 @@ func readFillpathRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 
 func (r *FillpathRecord) Draw(ctx *context) {
 	ctx.Fill()
+}
+
+type StrokepathRecord struct {
+	Record
+	Bounds RectL
+}
+
+func readStrokepathRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &StrokepathRecord{}
+	r.Record = Record{Type: EMR_STROKEPATH, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *StrokepathRecord) Draw(ctx *context) {
+	ctx.Stroke()
 }
 
 type CommentRecord struct {
@@ -1222,7 +1305,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_SETPOLYFILLMODE:         readSetpolyfillmodeRecord,
 	EMR_SETROP2:                 nil,
 	EMR_SETSTRETCHBLTMODE:       nil,
-	EMR_SETTEXTALIGN:            nil,
+	EMR_SETTEXTALIGN:            readSettextalignRecord,
 	EMR_SETCOLORADJUSTMENT:      nil,
 	EMR_SETTEXTCOLOR:            readSettextcolorRecord,
 	EMR_SETBKCOLOR:              readSetbkcolorRecord,
@@ -1235,7 +1318,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_SCALEWINDOWEXTEX:        nil,
 	EMR_SAVEDC:                  readSavedcRecord,
 	EMR_RESTOREDC:               readRestoredcRecord,
-	EMR_SETWORLDTRANSFORM:       nil,
+	EMR_SETWORLDTRANSFORM:       readSetworldtransformRecord,
 	EMR_MODIFYWORLDTRANSFORM:    readModifyworldtransformRecord,
 	EMR_SELECTOBJECT:            readSelectobjectRecord,
 	EMR_CREATEPEN:               readCreatepenRecord,
@@ -1264,7 +1347,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_CLOSEFIGURE:             readClosefigureRecord,
 	EMR_FILLPATH:                readFillpathRecord,
 	EMR_STROKEANDFILLPATH:       nil,
-	EMR_STROKEPATH:              nil,
+	EMR_STROKEPATH:              readStrokepathRecord,
 	EMR_FLATTENPATH:             nil,
 	EMR_WIDENPATH:               nil,
 	EMR_SELECTCLIPPATH:          nil,

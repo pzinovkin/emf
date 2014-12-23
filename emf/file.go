@@ -42,29 +42,54 @@ type context struct {
 	draw2d.GraphicContext
 	img     draw.Image
 	objects map[uint32]interface{}
+
+	w, h int
+
+	wo, vo *PointL
+	we, ve *SizeL
+	mm     uint32
 }
 
 func (f *EmfFile) initContext(w, h int) *context {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	gc := draw2d.NewGraphicContext(img)
 
-	return &context{gc, img, make(map[uint32]interface{})}
+	return &context{
+		GraphicContext: gc,
+		img:            img,
+		w:              w,
+		h:              h,
+		mm:             MM_TEXT,
+		objects:        make(map[uint32]interface{}),
+	}
+}
+
+func (ctx context) applyTransformation() {
+	if ctx.we == nil || ctx.ve == nil {
+		return
+	}
+
+	switch ctx.mm {
+
+	case MM_TEXT, MM_ISOTROPIC, MM_ANISOTROPIC:
+		sx := float64(ctx.ve.Cx) / float64(ctx.we.Cx)
+		sy := float64(ctx.ve.Cy) / float64(ctx.we.Cy)
+		ctx.Scale(sx, sy)
+	default:
+		sx := float64(ctx.w) / float64(ctx.we.Cx)
+		sy := float64(ctx.h) / float64(ctx.we.Cy)
+		ctx.Scale(sx, sy)
+
+	}
 }
 
 func (f *EmfFile) Draw() image.Image {
 
 	bounds := f.Header.Bounds
-
 	width := int(bounds.Right - bounds.Left)
 	height := int(bounds.Bottom - bounds.Top)
 
 	ctx := f.initContext(width, height)
-
-	// only vertical flip for now
-	if bounds.Top < 0 && bounds.Top > bounds.Bottom {
-		ctx.Translate(0, float64(height))
-		ctx.Scale(1, -1)
-	}
 
 	for _, rec := range f.Records {
 		rec.Draw(ctx)

@@ -1,2 +1,5 @@
 build
 emftoimg
+.DS_Store
+*.emf
+*.png
