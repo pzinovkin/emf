@@ -1,8 +1,9 @@
-# emftoimg
+# Emftoimg
 
 Converts Enhanced Metafile Format files ([MS-EMF](http://msdn.microsoft.com/en-us/library/cc230514.aspx)) to other image formats.
 
 Supports only png output for now.
+[Godep][godep] used for dependency management.
 
 ## Installation
 
@@ -19,3 +20,4 @@ Also supports stdin. Image will be written to stdout.
     $ cat /path/to/image.emf | emftoimg > /new/path/image.png
 
 
+[godep]: https://github.com/tools/godep

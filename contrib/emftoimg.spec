@@ -18,7 +18,7 @@ EMF images converter
 %setup -T -D -n %{name}-%{version}
 
 %build
-go build -o %{name}
+godep go build -o %{name}
 
 %install
 install -p -D -m 755 %{_builddir}/%{name}-%{version}/%{name} \
