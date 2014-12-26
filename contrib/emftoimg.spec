@@ -4,7 +4,7 @@
 Summary:    emfotimg
 Name:       emftoimg
 Version:    %{version}
-Release:    1%{?dist}
+Release:    %{release}%{?dist}
 License:    MIT
 Group:      Applications/System
 BuildRoot:  %{_tmppath}/%{name}-%{version}-%{release}-root
