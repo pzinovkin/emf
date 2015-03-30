@@ -4,8 +4,8 @@
 	"Deps": [
 		{
 			"ImportPath": "code.google.com/p/draw2d/draw2d",
-			"Comment": "release-19",
-			"Rev": "5e9b862124bea783ee751bdf5062710bb010e8ae"
+			"Comment": "release-20",
+			"Rev": "eaeb833648eee1b7c20e77ffc8180646c0395298"
 		},
 		{
 			"ImportPath": "code.google.com/p/freetype-go/freetype/raster",
@@ -29,7 +29,7 @@
 		},
 		{
 			"ImportPath": "github.com/disintegration/imaging",
-			"Rev": "9e67388aae65b9dc4e563beff827e19755deae6a"
+			"Rev": "3ab6ec550f20d497d2755ed3c48a3e45ad6b7eb9"
 		}
 	]
 }

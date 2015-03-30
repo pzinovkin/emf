@@ -5,12 +5,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
-	"image/draw"
+	"math"
 	"os"
 
 	"code.google.com/p/draw2d/draw2d"
-
-	"github.com/disintegration/imaging"
 )
 
 type Recorder interface {
@@ -518,8 +516,8 @@ var StockObjects = map[uint32]interface{}{
 	DKGRAY_BRUSH:        LogBrushEx{Color: ColorRef{Red: 64, Green: 64, Blue: 64}},
 	BLACK_BRUSH:         LogBrushEx{Color: ColorRef{Red: 0, Green: 0, Blue: 0}},
 	NULL_BRUSH:          true,
-	WHITE_PEN:           LogPen{ColorRef: ColorRef{Red: 255, Green: 255, Blue: 255}},
-	BLACK_PEN:           LogPen{ColorRef: ColorRef{Red: 0, Green: 0, Blue: 0}},
+	WHITE_PEN:           LogPen{ColorRef: ColorRef{Red: 255, Green: 255, Blue: 255}, Width: PointL{1, 0}},
+	BLACK_PEN:           LogPen{ColorRef: ColorRef{Red: 0, Green: 0, Blue: 0}, Width: PointL{1, 0}},
 	NULL_PEN:            true,
 	SYSTEM_FONT:         LogFont{Height: 11},
 	DEVICE_DEFAULT_FONT: LogFont{Height: 11},
@@ -544,15 +542,10 @@ func (r *SelectobjectRecord) Draw(ctx *context) {
 			ctx.SetFillColor(image.Transparent)
 		}
 	case LogPen:
-		if o.Width.X == 0 {
-			ctx.SetLineWidth(0)
-		}
+		ctx.SetLineWidth(float64(o.Width.X))
 		ctx.SetStrokeColor(o.ColorRef.GetColor())
-
 	case LogPenEx:
-		if o.Width == 0 {
-			ctx.SetLineWidth(0)
-		}
+		ctx.SetLineWidth(float64(o.Width))
 		ctx.SetStrokeColor(o.ColorRef.GetColor())
 	case LogBrushEx:
 		ctx.SetFillColor(o.Color.GetColor())
@@ -627,6 +620,67 @@ func readDeleteobjectRecord(reader *bytes.Reader, size uint32) (Recorder, error)
 
 func (r *DeleteobjectRecord) Draw(ctx *context) {
 	delete(ctx.objects, r.ihObject)
+}
+
+type RectangleRecord struct {
+	Record
+	Box RectL
+}
+
+func readRectangleRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &RectangleRecord{}
+	r.Record = Record{Type: EMR_RECTANGLE, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Box); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+func (r *RectangleRecord) Draw(ctx *context) {
+	x1, y1, x2, y2 := float64(r.Box.Left), float64(r.Box.Top), float64(r.Box.Right), float64(r.Box.Bottom)
+	ctx.MoveTo(x1, y1)
+	ctx.LineTo(x2, y1)
+	ctx.LineTo(x2, y2)
+	ctx.LineTo(x1, y2)
+	ctx.LineTo(x1, y1)
+	ctx.FillStroke()
+}
+
+type ArcRecord struct {
+	Record
+	Box   RectL
+	Start PointL
+	End   PointL
+}
+
+func readArcRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
+	r := &ArcRecord{}
+	r.Record = Record{Type: EMR_ARC, Size: size}
+
+	if err := binary.Read(reader, binary.LittleEndian, &r.Box); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(reader, binary.LittleEndian, &r.Start); err != nil {
+		return nil, err
+	}
+	if err := binary.Read(reader, binary.LittleEndian, &r.End); err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}
+
+func (r *ArcRecord) Draw(ctx *context) {
+	center := r.Box.Center()
+	rx := (float64(r.Box.Right) - float64(r.Box.Left) - 1) / 2
+	ry := (float64(r.Box.Bottom) - float64(r.Box.Top) - 1) / 2
+	// angles are specified in radians
+	sa := math.Atan2(float64(r.Start.Y-center.Y), float64(r.Start.X-center.X))
+	ea := math.Atan2(float64(r.End.Y-center.Y), float64(r.End.X-center.X)) - sa
+
+	ctx.ArcTo(float64(center.X), float64(center.Y), rx, ry, sa, ea)
+	ctx.Stroke()
 }
 
 type LinetoRecord struct {
@@ -767,301 +821,6 @@ func readCommentRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
 	// skip record data
 	reader.Seek(int64(r.Size-8), os.SEEK_CUR)
 	return r, nil
-}
-
-type BitbltRecord struct {
-	Record
-	Bounds                       RectL
-	xDest, yDest, cxDest, cyDest int32
-	BitBltRasterOperation        uint32
-	xSrc, ySrc                   int32
-	XformSrc                     XForm
-	BkColorSrc                   ColorRef
-	UsageSrc                     uint32
-	offBmiSrc, cbBmiSrc          uint32
-	offBitsSrc, cbBitsSrc        uint32
-	BmiSrc                       BitmapInfoHeader
-	BitsSrc                      []byte
-}
-
-func readBitbltRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
-	r := &BitbltRecord{}
-	r.Record = Record{Type: EMR_BITBLT, Size: size}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.xDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.yDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cxDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cyDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.BitBltRasterOperation); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.xSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.ySrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.XformSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.BkColorSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.UsageSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.offBmiSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cbBmiSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.offBitsSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cbBitsSrc); err != nil {
-		return nil, err
-	}
-
-	// no bitmap data
-	if r.offBmiSrc == 0 {
-		return r, nil
-	}
-
-	// BitmapBuffer
-	// skipping UndefinedSpace1
-	reader.Seek(int64(r.offBmiSrc-100), os.SEEK_CUR)
-	if err := binary.Read(reader, binary.LittleEndian, &r.BmiSrc); err != nil {
-		return nil, err
-	}
-
-	// skipping UndefinedSpace2
-	reader.Seek(int64(r.offBitsSrc-100-r.BmiSrc.HeaderSize), os.SEEK_CUR)
-	r.BitsSrc = make([]byte, r.cbBitsSrc)
-	if _, err := reader.Read(r.BitsSrc); err != nil {
-		return nil, err
-	}
-
-	return r, nil
-}
-
-type StretchdibitsRecord struct {
-	Record
-	Bounds                                 RectL
-	xDest, yDest, xSrc, ySrc, cxSrc, cySrc int32
-	offBmiSrc, cbBmiSrc                    uint32
-	offBitsSrc, cbBitsSrc                  uint32
-	UsageSrc, BitBltRasterOperation        uint32
-	cxDest, cyDest                         int32
-
-	BmiSrc  BitmapInfoHeader
-	BitsSrc []byte
-}
-
-func readStretchdibitsRecord(reader *bytes.Reader, size uint32) (Recorder, error) {
-	r := &StretchdibitsRecord{}
-	r.Record = Record{Type: EMR_STRETCHDIBITS, Size: size}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.Bounds); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.xDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.yDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.xSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.ySrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cxSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cySrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.offBmiSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cbBmiSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.offBitsSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cbBitsSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.UsageSrc); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.BitBltRasterOperation); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cxDest); err != nil {
-		return nil, err
-	}
-
-	if err := binary.Read(reader, binary.LittleEndian, &r.cyDest); err != nil {
-		return nil, err
-	}
-	// BitmapBuffer
-	// skipping UndefinedSpace1
-	reader.Seek(int64(r.offBmiSrc-80), os.SEEK_CUR)
-	if err := binary.Read(reader, binary.LittleEndian, &r.BmiSrc); err != nil {
-		return nil, err
-	}
-
-	// skipping UndefinedSpace2
-	reader.Seek(int64(r.offBitsSrc-80-r.BmiSrc.HeaderSize), os.SEEK_CUR)
-	r.BitsSrc = make([]byte, r.cbBitsSrc)
-	if _, err := reader.Read(r.BitsSrc); err != nil {
-		return nil, err
-	}
-
-	return r, nil
-}
-
-func (r *StretchdibitsRecord) readImage() image.Image {
-
-	// bytes per pixel
-	bpp, ok := map[int]int{
-		BI_BITCOUNT_3: 1,
-		BI_BITCOUNT_5: 3,
-		BI_BITCOUNT_4: 2,
-		BI_BITCOUNT_6: 4,
-	}[int(r.BmiSrc.BitCount)]
-
-	if !ok {
-		fmt.Fprintln(os.Stderr, "emf: unsupported bitmap type", r.BmiSrc.BitCount)
-		return nil
-	}
-
-	// src image width and height
-	width, height := int(r.BmiSrc.Width), int(r.BmiSrc.Height)
-	// bytes per line
-	bpl := (int(r.BmiSrc.BitCount) / 8) * width
-	// padding to 4 bytes
-	bpl = (bpl + 3) & ^3
-
-	switch r.BmiSrc.BitCount {
-	case BI_BITCOUNT_3:
-		img := image.NewGray(image.Rect(0, 0, width, height))
-		ix := 0
-		// BMP images are stored bottom-up
-		for y := height - 1; y >= 0; y-- {
-			b := r.BitsSrc[y*bpl : y*bpl+bpl]
-			p := img.Pix[ix*img.Stride : ix*img.Stride+img.Stride]
-			for i, j := 0, 0; i < len(p); i, j = i+1, j+bpp {
-				p[i] = b[j]
-			}
-			ix = ix + 1
-		}
-		return img
-
-	case BI_BITCOUNT_4:
-		if r.BmiSrc.Compression != BI_RGB {
-			fmt.Fprintln(os.Stderr, "emf: unsupported compression type", r.BmiSrc.Compression)
-			return nil
-		}
-
-		img := image.NewRGBA(image.Rect(0, 0, width, height))
-		ix := 0
-		// BMP images are stored bottom-up
-		for y := height - 1; y >= 0; y-- {
-			b := r.BitsSrc[y*bpl : y*bpl+bpl]
-			p := img.Pix[ix*img.Stride : ix*img.Stride+img.Stride]
-			for i, j := 0, 0; i < len(p); i, j = i+4, j+bpp {
-				// The relative intensities of red, green, and blue
-				// are represented with 5 bits for each color component.
-				c := uint16(b[j+1])<<8 | uint16(b[j])
-				p[i+0] = uint8((c>>10)&0x001f) * 8
-				p[i+1] = uint8((c>>5)&0x001f) * 8
-				p[i+2] = uint8(c&0x001f) * 8
-				p[i+3] = 0xff
-			}
-			ix = ix + 1
-		}
-		return img
-
-	case BI_BITCOUNT_5, BI_BITCOUNT_6:
-		img := image.NewRGBA(image.Rect(0, 0, width, height))
-		ix := 0
-		// BMP images are stored bottom-up
-		for y := height - 1; y >= 0; y-- {
-			b := r.BitsSrc[y*bpl : y*bpl+bpl]
-			p := img.Pix[ix*img.Stride : ix*img.Stride+img.Stride]
-			for i, j := 0, 0; i < len(p); i, j = i+4, j+bpp {
-				// color in BMP stored in BGR order
-				p[i+0] = b[j+2]
-				p[i+1] = b[j+1]
-				p[i+2] = b[j+0]
-				p[i+3] = 0xff
-			}
-			ix = ix + 1
-		}
-		return img
-	}
-	return nil
-}
-
-func (r *StretchdibitsRecord) Draw(ctx *context) {
-	img := r.readImage()
-	if img == nil {
-		return
-	}
-
-	// dest image rectangle
-	rect := r.Bounds.imageRect()
-
-	// Record bounds often differs for 1px with image size.
-	// Call scaling only if image size is bigger than record bounds because
-	// this procedure is very expensive.
-	if img.Bounds().Dx() > rect.Dx()+1 && img.Bounds().Dy() > rect.Dy()+1 {
-		img = imaging.Resize(img, rect.Dx(), rect.Dy(), imaging.CatmullRom)
-	}
-	draw.Draw(ctx.img, rect, img, image.ZP, draw.Over)
 }
 
 type ExtcreatefontindirectwRecord struct {
@@ -1494,9 +1253,9 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_DELETEOBJECT:            readDeleteobjectRecord,
 	EMR_ANGLEARC:                nil,
 	EMR_ELLIPSE:                 nil,
-	EMR_RECTANGLE:               nil,
+	EMR_RECTANGLE:               readRectangleRecord,
 	EMR_ROUNDRECT:               nil,
-	EMR_ARC:                     nil,
+	EMR_ARC:                     readArcRecord,
 	EMR_CHORD:                   nil,
 	EMR_PIE:                     nil,
 	EMR_SELECTPALETTE:           nil,
@@ -1527,7 +1286,7 @@ var records = map[uint32]func(*bytes.Reader, uint32) (Recorder, error){
 	EMR_PAINTRGN:                nil,
 	EMR_EXTSELECTCLIPRGN:        nil,
 	EMR_BITBLT:                  readBitbltRecord,
-	EMR_STRETCHBLT:              nil,
+	EMR_STRETCHBLT:              readStretchbltRecord,
 	EMR_MASKBLT:                 nil,
 	EMR_PLGBLT:                  nil,
 	EMR_SETDIBITSTODEVICE:       nil,

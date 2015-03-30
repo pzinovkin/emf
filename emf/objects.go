@@ -3,7 +3,6 @@ package emf
 import (
 	"bytes"
 	"encoding/binary"
-	"image"
 	"image/color"
 	"os"
 	"strings"
@@ -209,8 +208,14 @@ type RectL struct {
 	Left, Top, Right, Bottom int32
 }
 
-func (r RectL) imageRect() image.Rectangle {
-	return image.Rect(int(r.Top), int(r.Left), int(r.Right), int(r.Bottom))
+func (r RectL) Width() int32  { return r.Right - r.Left }
+func (r RectL) Height() int32 { return r.Bottom - r.Top }
+
+func (r RectL) Center() PointL {
+	return PointL{
+		X: r.Left + r.Width()/2,
+		Y: r.Top + r.Height()/2,
+	}
 }
 
 type BitmapInfoHeader struct {

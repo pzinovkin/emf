@@ -85,8 +85,10 @@ func (ctx context) applyTransformation() {
 func (f *EmfFile) Draw() image.Image {
 
 	bounds := f.Header.Bounds
-	width := int(bounds.Right - bounds.Left)
-	height := int(bounds.Bottom - bounds.Top)
+
+	// inclusive-inclusive bounds
+	width := int(bounds.Width()) + 1
+	height := int(bounds.Height()) + 1
 
 	ctx := f.initContext(width, height)
 
