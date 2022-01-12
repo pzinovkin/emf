@@ -1,5 +1,4 @@
-build
-emftoimg
+./emftopng
 .DS_Store
 *.emf
 *.png

@@ -1,23 +1,17 @@
-# Emftoimg
+# Emf
 
-Converts Enhanced Metafile Format files ([MS-EMF](http://msdn.microsoft.com/en-us/library/cc230514.aspx)) to other image formats.
-
-Supports only png output for now.
-[Godep][godep] used for dependency management.
+Enhanced Metafile Format ([MS-EMF](https://docs.microsoft.com/en-us/openspecs/windows_protocols/ms-emf/)) reader and converter. Supports only png output.
 
 ## Installation
 
-    go get github.com/pzinovkin/emftoimg
+    go get github.com/pzinovkin/emf/cmd/emftopng
 
 ## Usage
 
-Calling by passing file path as argument will generate image in the folder next to source emf file.
+Calling by passing file path as an argument will generate image in the folder next to source emf file.
 
-    $ emftoimg /path/to/image.emf
+    emftopng /path/to/image.emf
 
 Also supports stdin. Image will be written to stdout.
 
-    $ cat /path/to/image.emf | emftoimg > /new/path/image.png
-
-
-[godep]: https://github.com/tools/godep
+    emftopng < image.emf > image.png
